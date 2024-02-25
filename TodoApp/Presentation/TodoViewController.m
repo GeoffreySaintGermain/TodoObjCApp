@@ -10,6 +10,7 @@
 @interface TodoViewController ()
 
 @property (nonatomic) NSMutableArray *items;
+@property (nonatomic) NSArray *categories;
 
 @end
 
@@ -21,12 +22,67 @@
     
     self.items = @[
         @{@"name": @"Do something", @"category": @"Home"},
-        @{@"name": @"Do another thing", @"category": @"Home"}
+        @{@"name": @"Do another thing", @"category": @"Home"},
+        @{@"name": @"Learn some new things", @"category": @"Work"},
     ].mutableCopy;
+    
+    self.categories= @[@"Home", @"Work"];
     
     self.navigationItem.title = @"Todo List";
     
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Edit" style:UIBarButtonItemStylePlain target:self action:@selector(toggleEditing:)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addNewItem:)];
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+}
+
+#pragma mark - Editing
+
+- (void)toggleEditing:(UIBarButtonItem *)sender {
+    [self.tableView setEditing:!self.tableView.editing animated:YES];
+    
+    if (self.tableView.editing) {
+        sender.title = @"Done";
+        sender.style = UIBarButtonItemStyleDone;
+    } else {
+        sender.title = @"Edit";
+        sender.style = UIBarButtonItemStylePlain;
+    }
+}
+
+#pragma mark - Datasource helper methods
+
+- (NSArray *)itemsInCategory:(NSString *)targetCategory {
+    NSPredicate *matchingPredicate = [NSPredicate predicateWithFormat:@"category == %@", targetCategory];
+    NSArray *categoryItems = [self.items filteredArrayUsingPredicate:matchingPredicate];
+    
+    return categoryItems;
+}
+
+- (NSInteger)numberOfItemsInCategory:(NSString *)targetCategory {
+    return [self itemsInCategory:targetCategory].count;
+}
+
+- (NSDictionary *)itemsAtIndexPath:(NSIndexPath *)indexPath {
+    NSString *category = self.categories[indexPath.section];
+    NSArray *categoryItems = [self itemsInCategory:category];
+    NSDictionary *item = categoryItems[indexPath.row];
+    
+    return item;
+}
+
+- (NSInteger)itemIndexForIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *item = [self itemsAtIndexPath:indexPath];
+    NSInteger index = [self.items indexOfObjectIdenticalTo:item];
+    
+    return index;
+}
+
+-(void)removeItemAtIndexPath:(NSIndexPath *)indexPath {
+    NSInteger index = [self itemIndexForIndexPath:indexPath];
+    [self.items removeObjectAtIndex:index];
 }
 
 #pragma mark - Adding items
@@ -56,29 +112,34 @@
     NSString *itemNameTextField = alertController.textFields.firstObject.text;
     
     if ([itemNameTextField length] > 0) {
-        NSDictionary *itemToAdd = @{ @"name": itemNameTextField, @"category": @"Home" };
+        NSDictionary *itemToAdd = @{@"name": itemNameTextField, @"category": @"Home"};
         
         [self.items addObject:itemToAdd];
-        [self.tableView insertRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:self.items.count - 1 inSection:0]]
+        NSInteger numberHomeItems = [self numberOfItemsInCategory:@"Home"];
+        [self.tableView insertRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:numberHomeItems - 1 inSection:0]]
                               withRowAnimation: UITableViewRowAnimationAutomatic];
     }
 }
 
-#pragma mark - Table View DataSource
+#pragma mark - Table View Delegate
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
+    return self.categories.count;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.items.count;
+    return [self numberOfItemsInCategory:self.categories[section]];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return self.categories[section];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NSString *cellIdentifier = @"TodoItemRow";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier: cellIdentifier forIndexPath:indexPath];
     
-    NSDictionary *item = self.items[indexPath.row];
+    NSDictionary *item = [self itemsAtIndexPath:indexPath];
     cell.textLabel.text = item[@"name"];
     
     if ([item[@"completed"] boolValue]) {
@@ -91,15 +152,32 @@
 }
 
 -(void) tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSMutableDictionary *item = [self.items[indexPath.row] mutableCopy];
+    NSInteger index = [self itemIndexForIndexPath:indexPath];
+    
+    NSMutableDictionary *item = [self.items[index] mutableCopy];
     BOOL completed = [item[@"completed"] boolValue];
     item[@"completed"] = @(!completed);
     
-    self.items[indexPath.row] = item;
+    self.items[index] = item;
     
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
     cell.accessoryType = ([item[@"completed"] boolValue]) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return UITableViewCellEditingStyleDelete;
+}
+
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    return YES;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        [self removeItemAtIndexPath:indexPath];
+        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+    }
 }
 
 @end
